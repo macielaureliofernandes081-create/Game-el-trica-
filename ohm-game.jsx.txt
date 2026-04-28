@@ -1,0 +1,495 @@
+import { useState, useEffect, useRef } from "react";
+
+// Only very easy numbers — products of small integers
+const EASY_PAIRS = [
+  [2,1],[2,2],[2,3],[3,1],[3,2],[4,1],[4,2],[5,1],[5,2],[6,1],[6,2],[8,1],[9,1],[10,1],[10,2]
+];
+
+function generateQuestion() {
+  const [R, I] = EASY_PAIRS[Math.floor(Math.random() * EASY_PAIRS.length)];
+  const V = R * I;
+  const type = Math.floor(Math.random() * 3);
+  if (type === 0) return { find:"I", given:{V,R}, answer:I };
+  if (type === 1) return { find:"V", given:{I,R}, answer:V };
+  return       { find:"R", given:{V,I}, answer:R };
+}
+
+// Steps to show HOW to calculate
+function getSteps(q) {
+  const {find, given, answer} = q;
+  if (find === "V") return [
+    { text: "Para achar a Tensão (V), você multiplica:", highlight: false },
+    { text: `Corrente × Resistência`, highlight: false },
+    { text: `${given.I} × ${given.R} = ${answer} V`, highlight: true },
+  ];
+  if (find === "I") return [
+    { text: "Para achar a Corrente (I), você divide:", highlight: false },
+    { text: `Tensão ÷ Resistência`, highlight: false },
+    { text: `${given.V} ÷ ${given.R} = ${answer} A`, highlight: true },
+  ];
+  return [
+    { text: "Para achar a Resistência (R), você divide:", highlight: false },
+    { text: `Tensão ÷ Corrente`, highlight: false },
+    { text: `${given.V} ÷ ${given.I} = ${answer} Ω`, highlight: true },
+  ];
+}
+
+const INFO = {
+  V: { name:"Tensão",      emoji:"🔋", color:"#f59e0b", bg:"#fffbeb", border:"#fcd34d", unit:"V",  unitName:"Volts"   },
+  I: { name:"Corrente",    emoji:"⚡", color:"#2563eb", bg:"#eff6ff", border:"#93c5fd", unit:"A",  unitName:"Amperes" },
+  R: { name:"Resistência", emoji:"🔌", color:"#dc2626", bg:"#fff1f2", border:"#fca5a5", unit:"Ω",  unitName:"Ohms"    },
+};
+
+// Simple triangle diagram
+function Triangle({ highlight }) {
+  const sz = 130;
+  return (
+    <svg viewBox="0 0 130 115" width={sz} height={sz} style={{display:"block",margin:"0 auto"}}>
+      <polygon points="65,6 124,108 6,108" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="3"/>
+      <line x1="6" y1="62" x2="124" y2="62" stroke="#e2e8f0" strokeWidth="3"/>
+      <line x1="65" y1="62" x2="65" y2="108" stroke="#e2e8f0" strokeWidth="3"/>
+      {/* V top */}
+      <rect x="40" y="14" width="50" height="42" rx="6"
+        fill={highlight==="V" ? "#fef3c7" : "transparent"}
+        stroke={highlight==="V" ? "#f59e0b" : "none"} strokeWidth="2"/>
+      <text x="65" y="44" textAnchor="middle" fontSize="26" fontWeight="900" fill="#f59e0b">V</text>
+      {/* I bottom-left */}
+      <rect x="6" y="64" width="56" height="42" rx="6"
+        fill={highlight==="I" ? "#dbeafe" : "transparent"}
+        stroke={highlight==="I" ? "#2563eb" : "none"} strokeWidth="2"/>
+      <text x="34" y="93" textAnchor="middle" fontSize="26" fontWeight="900" fill="#2563eb">I</text>
+      {/* R bottom-right */}
+      <rect x="68" y="64" width="56" height="42" rx="6"
+        fill={highlight==="R" ? "#fee2e2" : "transparent"}
+        stroke={highlight==="R" ? "#dc2626" : "none"} strokeWidth="2"/>
+      <text x="96" y="93" textAnchor="middle" fontSize="26" fontWeight="900" fill="#dc2626">R</text>
+      {/* × sign */}
+      <text x="65" y="93" textAnchor="middle" fontSize="14" fill="#94a3b8">×</text>
+    </svg>
+  );
+}
+
+// Animated wire circuit — just decorative, very simple
+function MiniCircuit({ findKey }) {
+  return (
+    <svg viewBox="0 0 300 130" style={{width:"100%",maxWidth:300,display:"block",margin:"0 auto"}}>
+      {/* Wire rectangle */}
+      <rect x="30" y="30" width="240" height="70" rx="20" fill="none" stroke="#e2e8f0" strokeWidth="6"/>
+      {/* Moving dots */}
+      {[0,1,2].map(i=>(
+        <circle key={i} r="7" fill="#60a5fa" opacity="0.75">
+          <animateMotion dur="2.5s" repeatCount="indefinite" begin={`${i*0.83}s`}
+            path="M30,65 L30,30 L270,30 L270,100 L30,100 L30,65"/>
+        </circle>
+      ))}
+      {/* Battery */}
+      <rect x="4" y="42" width="52" height="46" rx="12" fill="#fffbeb" stroke="#fcd34d" strokeWidth={findKey==="V"?4:2}/>
+      <text x="30" y="62" textAnchor="middle" fontSize="16">🔋</text>
+      <text x="30" y="80" textAnchor="middle" fontSize="11" fontWeight="800" fill="#f59e0b">Tensão</text>
+      {/* Resistor */}
+      <rect x="100" y="8" width="100" height="40" rx="12" fill="#fff1f2" stroke="#fca5a5" strokeWidth={findKey==="R"?4:2}/>
+      <text x="150" y="24" textAnchor="middle" fontSize="14">🔌</text>
+      <text x="150" y="40" textAnchor="middle" fontSize="10" fontWeight="800" fill="#dc2626">Resistência</text>
+      {/* Ammeter */}
+      <rect x="244" y="42" width="52" height="46" rx="12" fill="#eff6ff" stroke="#93c5fd" strokeWidth={findKey==="I"?4:2}/>
+      <text x="270" y="62" textAnchor="middle" fontSize="16">⚡</text>
+      <text x="270" y="80" textAnchor="middle" fontSize="11" fontWeight="800" fill="#2563eb">Corrente</text>
+    </svg>
+  );
+}
+
+function Confetti({active}) {
+  if (!active) return null;
+  const items = ["⭐","🎉","✨","🌟","🎊","💛","💙","❤️"];
+  return (
+    <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:999,overflow:"hidden"}}>
+      {Array.from({length:22},(_,i)=>(
+        <div key={i} style={{
+          position:"absolute", top:"-40px",
+          left:`${4+i*4.2}%`,
+          fontSize: 22+Math.floor(i%3)*8,
+          animation:`confettiFall ${1.2+i*0.08}s ${i*0.07}s ease-in forwards`
+        }}>{items[i%items.length]}</div>
+      ))}
+    </div>
+  );
+}
+
+export default function OhmGame() {
+  const [screen, setScreen] = useState("menu");   // menu | learn | game | result
+  const [q, setQ] = useState(null);
+  const [input, setInput] = useState("");
+  const [answered, setAnswered] = useState(false);
+  const [correct, setCorrect] = useState(null);
+  const [score, setScore] = useState(0);
+  const [round, setRound] = useState(0);
+  const [history, setHistory] = useState([]);
+  const [mascot, setMascot] = useState("😊");
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  const [learnTab, setLearnTab] = useState("V");
+  const inputRef = useRef();
+  const ROUNDS = 5;
+
+  function start() {
+    const nq = generateQuestion();
+    setQ(nq); setInput(""); setAnswered(false); setCorrect(null);
+    setScore(0); setRound(1); setHistory([]); setMascot("😊"); setShowHint(false);
+    setScreen("game");
+    setTimeout(()=>inputRef.current?.focus(),150);
+  }
+
+  function next() {
+    if (round >= ROUNDS) { setScreen("result"); return; }
+    const nq = generateQuestion();
+    setQ(nq); setInput(""); setAnswered(false); setCorrect(null);
+    setRound(r=>r+1); setMascot("😊"); setShowHint(false);
+    setTimeout(()=>inputRef.current?.focus(),150);
+  }
+
+  function submit() {
+    if (answered) return;
+    const val = parseInt(input, 10);
+    const ok = val === q.answer;
+    setAnswered(true); setCorrect(ok); setMascot(ok?"🤩":"😅");
+    if (ok) { setScore(s=>s+10); setShowConfetti(true); setTimeout(()=>setShowConfetti(false),2000); }
+    setHistory(h=>[...h,{q, userAnswer:input, correct:ok}]);
+  }
+
+  const info = q ? INFO[q.find] : null;
+  const steps = q ? getSteps(q) : [];
+
+  return (
+    <div style={{minHeight:"100vh",background:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif",color:"#1e293b",display:"flex",flexDirection:"column",alignItems:"center",padding:"20px 16px",overflowX:"hidden"}}>
+      <style>{`
+        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+        @keyframes bounce{0%{transform:translateY(0)}30%{transform:translateY(-20px)}60%{transform:translateY(-8px)}100%{transform:translateY(0)}}
+        @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-10px)}75%{transform:translateX(10px)}}
+        @keyframes confettiFall{0%{opacity:1;transform:translateY(0) rotate(0deg)}100%{opacity:0;transform:translateY(105vh) rotate(540deg)}}
+        @keyframes pop{0%{transform:scale(0.85);opacity:0}70%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+        @keyframes wiggle{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
+        @keyframes fadein{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        .btn{cursor:pointer;border:none;border-radius:16px;font-weight:800;font-family:inherit;transition:all .12s;box-shadow:0 5px 0 rgba(0,0,0,0.12);}
+        .btn:hover{transform:translateY(-2px);box-shadow:0 7px 0 rgba(0,0,0,0.12);}
+        .btn:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,0.12);}
+        input:focus{outline:none;}
+      `}</style>
+
+      <Confetti active={showConfetti}/>
+
+      {/* ── MENU ── */}
+      {screen==="menu" && (
+        <div style={{width:"100%",maxWidth:400,animation:"fadein 0.5s"}}>
+          <div style={{textAlign:"center",marginBottom:16}}>
+            <div style={{fontSize:70,animation:"float 3s ease-in-out infinite"}}>⚡</div>
+            <h1 style={{margin:"6px 0 4px",fontSize:32,fontWeight:900}}>Lei de Ohm</h1>
+            <p style={{color:"#64748b",fontSize:15,margin:"4px 0 20px"}}>Aprenda eletricidade de um jeito fácil! 🎮</p>
+          </div>
+
+          {/* Big formula card */}
+          <div style={{background:"#f8fafc",border:"3px solid #e2e8f0",borderRadius:24,padding:"18px 20px",textAlign:"center",marginBottom:18}}>
+            <p style={{fontSize:14,color:"#64748b",margin:"0 0 8px"}}>A eletricidade tem 3 partes:</p>
+            <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:14}}>
+              {Object.entries(INFO).map(([k,v])=>(
+                <div key={k} style={{flex:1,background:v.bg,border:`3px solid ${v.border}`,borderRadius:16,padding:"10px 6px",textAlign:"center"}}>
+                  <div style={{fontSize:26}}>{v.emoji}</div>
+                  <div style={{fontSize:13,fontWeight:800,color:v.color,marginTop:4}}>{v.name}</div>
+                  <div style={{fontSize:20,fontWeight:900,color:v.color}}>{k}</div>
+                  <div style={{fontSize:11,color:"#94a3b8"}}>{v.unit}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:13,color:"#64748b",marginBottom:6}}>Elas se relacionam assim:</div>
+            <div style={{fontSize:28,fontWeight:900,letterSpacing:4}}>
+              <span style={{color:"#f59e0b"}}>V</span> = <span style={{color:"#2563eb"}}>I</span> × <span style={{color:"#dc2626"}}>R</span>
+            </div>
+          </div>
+
+          <button className="btn" onClick={()=>setScreen("learn")} style={{width:"100%",padding:"16px",fontSize:17,background:"#f1f5f9",color:"#475569",marginBottom:12}}>
+            📚 Ver explicação antes de jogar
+          </button>
+          <button className="btn" onClick={start} style={{width:"100%",padding:"18px",fontSize:20,background:"linear-gradient(135deg,#f59e0b,#ef4444)",color:"#fff"}}>
+            🚀 Jogar agora!
+          </button>
+        </div>
+      )}
+
+      {/* ── APRENDA ── */}
+      {screen==="learn" && (
+        <div style={{width:"100%",maxWidth:400,animation:"fadein 0.4s"}}>
+          <button className="btn" onClick={()=>setScreen("menu")} style={{background:"#f1f5f9",color:"#64748b",padding:"8px 16px",fontSize:14,marginBottom:16}}>← Voltar</button>
+          <h2 style={{textAlign:"center",margin:"0 0 16px",fontSize:24,fontWeight:900}}>📚 Como funciona?</h2>
+
+          {/* Tabs */}
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            {Object.entries(INFO).map(([k,v])=>(
+              <button key={k} className="btn" onClick={()=>setLearnTab(k)} style={{
+                flex:1,padding:"10px 6px",fontSize:14,
+                background: learnTab===k ? v.color : "#f1f5f9",
+                color: learnTab===k ? "#fff" : "#64748b",
+                boxShadow: learnTab===k ? `0 4px 0 ${v.border}` : "0 4px 0 #e2e8f0"
+              }}>{v.emoji} {v.name}</button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          {Object.entries(INFO).map(([k,v])=> learnTab!==k ? null : (
+            <div key={k} style={{animation:"pop 0.3s"}}>
+              <div style={{background:v.bg,border:`3px solid ${v.border}`,borderRadius:20,padding:"20px",marginBottom:14,textAlign:"center"}}>
+                <div style={{fontSize:52}}>{v.emoji}</div>
+                <h3 style={{margin:"8px 0 4px",fontSize:22,color:v.color}}>{v.name} ({k})</h3>
+                <p style={{color:"#475569",fontSize:14,margin:"0 0 12px"}}>
+                  {k==="V" && "É como a FORÇA que empurra a eletricidade pelo fio. Pense numa mangueira: a tensão é a pressão da água!"}
+                  {k==="I" && "É a QUANTIDADE de eletricidade que passa pelo fio. Pense numa mangueira: a corrente é a quantidade de água que passa!"}
+                  {k==="R" && "É o que ATRAPALHA a eletricidade de passar. Pense numa mangueira: a resistência é quando o cano fica mais fino!"}
+                </p>
+                <div style={{fontSize:14,fontWeight:700,color:"#64748b"}}>Medido em: <span style={{color:v.color,fontSize:16}}>{v.unitName} ({v.unit})</span></div>
+              </div>
+
+              <div style={{background:"#f8fafc",border:"3px solid #e2e8f0",borderRadius:20,padding:"16px",marginBottom:14}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#64748b",marginBottom:10,textAlign:"center"}}>Como calcular {v.name}?</div>
+                {k==="V" && <>
+                  <div style={{fontSize:16,textAlign:"center",marginBottom:8}}>Você <strong>multiplica</strong> ×</div>
+                  <div style={{background:"#fffbeb",border:"2px solid #fcd34d",borderRadius:14,padding:"12px",textAlign:"center",fontSize:20,fontWeight:900,color:"#f59e0b"}}>
+                    V = I × R
+                  </div>
+                  <div style={{marginTop:10,fontSize:14,color:"#64748b",textAlign:"center"}}>Exemplo: I=3A, R=4Ω → V = 3×4 = <strong style={{color:"#f59e0b"}}>12V</strong></div>
+                </>}
+                {k==="I" && <>
+                  <div style={{fontSize:16,textAlign:"center",marginBottom:8}}>Você <strong>divide</strong> ÷</div>
+                  <div style={{background:"#eff6ff",border:"2px solid #93c5fd",borderRadius:14,padding:"12px",textAlign:"center",fontSize:20,fontWeight:900,color:"#2563eb"}}>
+                    I = V ÷ R
+                  </div>
+                  <div style={{marginTop:10,fontSize:14,color:"#64748b",textAlign:"center"}}>Exemplo: V=12V, R=4Ω → I = 12÷4 = <strong style={{color:"#2563eb"}}>3A</strong></div>
+                </>}
+                {k==="R" && <>
+                  <div style={{fontSize:16,textAlign:"center",marginBottom:8}}>Você <strong>divide</strong> ÷</div>
+                  <div style={{background:"#fff1f2",border:"2px solid #fca5a5",borderRadius:14,padding:"12px",textAlign:"center",fontSize:20,fontWeight:900,color:"#dc2626"}}>
+                    R = V ÷ I
+                  </div>
+                  <div style={{marginTop:10,fontSize:14,color:"#64748b",textAlign:"center"}}>Exemplo: V=12V, I=3A → R = 12÷3 = <strong style={{color:"#dc2626"}}>4Ω</strong></div>
+                </>}
+              </div>
+
+              <Triangle highlight={k}/>
+              <p style={{textAlign:"center",fontSize:12,color:"#94a3b8",marginTop:8}}>O triângulo ajuda a lembrar a fórmula! Cubra o que você quer calcular.</p>
+            </div>
+          ))}
+
+          <button className="btn" onClick={start} style={{width:"100%",padding:"18px",fontSize:20,background:"linear-gradient(135deg,#f59e0b,#ef4444)",color:"#fff",marginTop:16}}>
+            🚀 Pronto! Vamos jogar!
+          </button>
+        </div>
+      )}
+
+      {/* ── GAME ── */}
+      {screen==="game" && q && (
+        <div style={{width:"100%",maxWidth:400,animation:"fadein 0.4s"}}>
+
+          {/* Score bar */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{background:"#f1f5f9",borderRadius:12,padding:"6px 14px",fontWeight:700,fontSize:14}}>🎯 Pergunta {round} de {ROUNDS}</div>
+            <div style={{background:"#fef3c7",borderRadius:12,padding:"6px 14px",fontWeight:800,fontSize:16,color:"#d97706"}}>⭐ {score} pts</div>
+          </div>
+
+          {/* Progress dots */}
+          <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:20}}>
+            {Array.from({length:ROUNDS},(_,i)=>(
+              <div key={i} style={{width:14,height:14,borderRadius:99,
+                background: i<round-1 ? (history[i]?.correct?"#22c55e":"#ef4444") : i===round-1 ? "#f59e0b" : "#e2e8f0"
+              }}/>
+            ))}
+          </div>
+
+          {/* Mascot */}
+          <div style={{textAlign:"center",marginBottom:12}}>
+            <div style={{fontSize:62,display:"inline-block",
+              animation: mascot==="🤩"?"bounce 0.6s":mascot==="😅"?"shake 0.5s":"float 3s ease-in-out infinite"
+            }}>{mascot}</div>
+          </div>
+
+          {/* THE QUESTION — big and clear */}
+          <div style={{background:info.bg,border:`4px solid ${info.border}`,borderRadius:24,padding:"20px",textAlign:"center",marginBottom:14}}>
+            <div style={{fontSize:14,color:"#64748b",marginBottom:6}}>Você precisa descobrir:</div>
+            <div style={{fontSize:30,fontWeight:900,color:info.color}}>
+              {info.emoji} {info.name} ({q.find})
+            </div>
+            <div style={{fontSize:13,color:"#94a3b8",marginTop:4}}>em {info.unitName} ({info.unit})</div>
+          </div>
+
+          {/* Given values — super big */}
+          <div style={{fontSize:14,fontWeight:700,color:"#64748b",textAlign:"center",marginBottom:8}}>Você já sabe:</div>
+          <div style={{display:"flex",gap:12,marginBottom:16}}>
+            {Object.entries(q.given).map(([k,v])=>(
+              <div key={k} style={{flex:1,background:INFO[k].bg,border:`3px solid ${INFO[k].border}`,borderRadius:20,padding:"16px 10px",textAlign:"center"}}>
+                <div style={{fontSize:30}}>{INFO[k].emoji}</div>
+                <div style={{fontSize:13,fontWeight:700,color:INFO[k].color,marginTop:6}}>{INFO[k].name}</div>
+                <div style={{fontSize:36,fontWeight:900,lineHeight:1.1,color:"#1e293b"}}>{v}</div>
+                <div style={{fontSize:16,color:INFO[k].color,fontWeight:700}}>{INFO[k].unit}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Mini circuit */}
+          <div style={{background:"#f8fafc",border:"2px solid #e2e8f0",borderRadius:18,padding:"10px",marginBottom:14}}>
+            <MiniCircuit findKey={q.find}/>
+          </div>
+
+          {/* Hint button */}
+          <button className="btn" onClick={()=>setShowHint(h=>!h)} style={{
+            width:"100%",padding:"12px",fontSize:15,marginBottom:10,
+            background: showHint?"#fef3c7":"#f8fafc",
+            color:"#64748b",border:`2px dashed ${showHint?"#f59e0b":"#e2e8f0"}`,
+            boxShadow:"none"
+          }}>
+            💡 {showHint?"Esconder dica":"Mostrar dica — como calcular?"}
+          </button>
+
+          {showHint && (
+            <div style={{background:"#fffbeb",border:"3px solid #fcd34d",borderRadius:18,padding:"16px",marginBottom:14,animation:"pop 0.3s"}}>
+              <div style={{fontSize:14,color:"#92400e",fontWeight:700,marginBottom:8,textAlign:"center"}}>
+                {q.find==="V" && "Para achar a Tensão → multiplique! ×"}
+                {q.find==="I" && "Para achar a Corrente → divida! ÷"}
+                {q.find==="R" && "Para achar a Resistência → divida! ÷"}
+              </div>
+              <div style={{background:"#fff",borderRadius:12,padding:"12px",textAlign:"center"}}>
+                {q.find==="V" && <>
+                  <div style={{fontSize:18,color:"#64748b"}}>Corrente × Resistência</div>
+                  <div style={{fontSize:26,fontWeight:900,color:"#f59e0b",marginTop:6}}>{q.given.I} × {q.given.R} = ?</div>
+                </>}
+                {q.find==="I" && <>
+                  <div style={{fontSize:18,color:"#64748b"}}>Tensão ÷ Resistência</div>
+                  <div style={{fontSize:26,fontWeight:900,color:"#2563eb",marginTop:6}}>{q.given.V} ÷ {q.given.R} = ?</div>
+                </>}
+                {q.find==="R" && <>
+                  <div style={{fontSize:18,color:"#64748b"}}>Tensão ÷ Corrente</div>
+                  <div style={{fontSize:26,fontWeight:900,color:"#dc2626",marginTop:6}}>{q.given.V} ÷ {q.given.I} = ?</div>
+                </>}
+              </div>
+              <Triangle highlight={q.find}/>
+            </div>
+          )}
+
+          {/* Input */}
+          {!answered && (
+            <div style={{display:"flex",gap:10}}>
+              <input
+                ref={inputRef}
+                type="number"
+                value={input}
+                onChange={e=>setInput(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter") submit(); }}
+                placeholder={`Qual é o valor de ${q.find}?`}
+                style={{
+                  flex:1,padding:"18px 16px",fontSize:24,fontWeight:800,
+                  background:"#f8fafc",border:`4px solid ${info.color}`,
+                  borderRadius:18,color:"#1e293b",fontFamily:"inherit",textAlign:"center"
+                }}
+              />
+              <button className="btn" onClick={submit} style={{
+                padding:"18px 20px",fontSize:26,
+                background:info.color,color:"#fff",borderRadius:18
+              }}>✓</button>
+            </div>
+          )}
+
+          {/* Answer feedback */}
+          {answered && (
+            <div style={{animation:"pop 0.4s"}}>
+              {/* Result banner */}
+              <div style={{
+                background: correct?"#f0fdf4":"#fff1f2",
+                border:`4px solid ${correct?"#22c55e":"#ef4444"}`,
+                borderRadius:22,padding:"18px",textAlign:"center",marginBottom:12
+              }}>
+                <div style={{fontSize:48}}>{correct?"🎉":"😅"}</div>
+                <div style={{fontSize:20,fontWeight:900,color:correct?"#16a34a":"#dc2626",marginTop:6}}>
+                  {correct ? "Acertou! Muito bem! 🚀" : `Quase! A resposta era ${q.answer} ${info.unit}`}
+                </div>
+
+                {/* Step by step explanation always shown */}
+                <div style={{marginTop:14,background:"#fff",borderRadius:14,padding:"14px",textAlign:"left"}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#64748b",marginBottom:8}}>📐 Como calcular:</div>
+                  {steps.map((s,i)=>(
+                    <div key={i} style={{
+                      fontSize: s.highlight ? 20 : 14,
+                      fontWeight: s.highlight ? 900 : 500,
+                      color: s.highlight ? info.color : "#475569",
+                      marginBottom: i<steps.length-1 ? 6 : 0,
+                      background: s.highlight ? info.bg : "transparent",
+                      borderRadius: s.highlight ? 10 : 0,
+                      padding: s.highlight ? "6px 10px" : 0,
+                    }}>{i===0?"1️⃣":i===1?"2️⃣":"✅"} {s.text}</div>
+                  ))}
+                </div>
+              </div>
+
+              <button className="btn" onClick={next} style={{
+                width:"100%",padding:"16px",fontSize:18,
+                background:"linear-gradient(135deg,#2563eb,#6366f1)",color:"#fff"
+              }}>
+                {round>=ROUNDS ? "📊 Ver meu resultado!" : "➡ Próxima pergunta!"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── RESULT ── */}
+      {screen==="result" && (
+        <div style={{width:"100%",maxWidth:400,animation:"fadein 0.5s"}}>
+          <div style={{textAlign:"center",marginBottom:20}}>
+            <div style={{fontSize:90}}>
+              {score>=50?"🏆":score>=30?"🥈":score>=10?"🥉":"💪"}
+            </div>
+            <h2 style={{margin:"8px 0 4px",fontSize:28,fontWeight:900}}>
+              {score>=50?"Incrível!":score>=30?"Muito bem!":score>=10?"Continue assim!":"Pratique mais!"}
+            </h2>
+            <div style={{fontSize:48,fontWeight:900,color:"#f59e0b"}}>{score} pts ⭐</div>
+            <div style={{color:"#64748b",fontSize:15,marginTop:4}}>
+              {history.filter(h=>h.correct).length} de {ROUNDS} corretas!
+            </div>
+          </div>
+
+          {/* Breakdown */}
+          <div style={{background:"#f8fafc",border:"3px solid #e2e8f0",borderRadius:20,padding:16,marginBottom:18}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#64748b",marginBottom:10}}>Suas respostas:</div>
+            {history.map((h,i)=>{
+              const fi = INFO[h.q.find];
+              return (
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:i<history.length-1?"1px solid #f1f5f9":"none"}}>
+                  <div style={{fontSize:22}}>{h.correct?"✅":"❌"}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,color:"#475569"}}>{fi.emoji} Calcular {fi.name}</div>
+                    <div style={{fontSize:12,color:"#94a3b8"}}>
+                      {h.q.find==="V"?`${h.q.given.I}×${h.q.given.R}`:h.q.find==="I"?`${h.q.given.V}÷${h.q.given.R}`:`${h.q.given.V}÷${h.q.given.I}`} = {h.q.answer}
+                    </div>
+                  </div>
+                  <div style={{fontSize:14,fontWeight:700,color:h.correct?"#16a34a":"#ef4444"}}>
+                    {h.correct?`✓ ${h.q.answer}${fi.unit}`:`✗ (era ${h.q.answer}${fi.unit})`}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Formula reminder */}
+          <div style={{background:"#fffbeb",border:"3px solid #fcd34d",borderRadius:18,padding:"14px",marginBottom:18,textAlign:"center"}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#92400e"}}>🧠 Lembre-se sempre:</div>
+            <div style={{fontSize:28,fontWeight:900,marginTop:6,letterSpacing:3}}>
+              <span style={{color:"#f59e0b"}}>V</span> = <span style={{color:"#2563eb"}}>I</span> × <span style={{color:"#dc2626"}}>R</span>
+            </div>
+            <div style={{fontSize:12,color:"#92400e",marginTop:6}}>
+              I = V÷R &nbsp;|&nbsp; R = V÷I &nbsp;|&nbsp; V = I×R
+            </div>
+          </div>
+
+          <div style={{display:"flex",gap:12}}>
+            <button className="btn" onClick={start} style={{flex:1,padding:"16px",fontSize:16,background:"linear-gradient(135deg,#f59e0b,#ef4444)",color:"#fff"}}>🔄 Jogar de novo!</button>
+            <button className="btn" onClick={()=>setScreen("learn")} style={{flex:1,padding:"16px",fontSize:16,background:"#f1f5f9",color:"#475569",boxShadow:"0 5px 0 #e2e8f0"}}>📚 Rever conteúdo</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
